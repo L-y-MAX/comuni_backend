@@ -34,6 +34,8 @@ DEBUG = os.getenv('DEBUG', default=False)
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS').split(',') if h.strip()]
 # 2. CSRF可信源（关键！解决Origin验证失败）
 CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv('CSRF_TRUSTED_ORIGINS').split(',') if h.strip()]
+# 3. 部署在 Nginx 后面时，让 Django 知道原始请求是 HTTPS（后台登录/CSRF 需要）
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Application definition
 
 INSTALLED_APPS = [
@@ -299,7 +301,7 @@ IMPORT_EXPORT_USE_TRANSACTIONS = True  # 事务导入，失败回滚
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # 生产环境静态文件收集目录
 
 # settings.py 中添加（确保能找到第三方库和自定义的静态文件）
