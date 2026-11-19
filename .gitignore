@@ -211,9 +211,6 @@ tests/
 # 忽略所有 .zip 压缩文件
 *.zip
 
-# ignore migrations
-migrations/
-
 # ignore project files or folder
 static/
 media/
