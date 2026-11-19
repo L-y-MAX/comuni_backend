@@ -1666,9 +1666,10 @@ class GlobalSearchViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 3. 缓存逻辑
+        # 3. 缓存逻辑（必须按用户区分，否则会串出别人的私有知识库）
+        user = request.user
         redis_conn = get_redis_connection("default")
-        cache_key = f"knowledge_search:all:{keyword}:page_{page}:size_{page_size}"
+        cache_key = f"knowledge_search:user:{user.id}:{keyword}:page_{page}:size_{page_size}"
         cache_data = redis_conn.get(cache_key)
 
         # 4. 缓存命中：直接返回
@@ -1677,17 +1678,10 @@ class GlobalSearchViewSet(viewsets.GenericViewSet):
             return Response(result)
 
         # 5. 缓存未命中：数据库查询
-        user = request.user
 
-        # 获取用户可访问的知识库ID
-        followed_public_kb_ids = UserFollowKnowledgeBase.objects.filter(
-            user=user,
-            is_active=True,
-            knowledge_base__is_public=True
-        ).values_list("knowledge_base_id", flat=True)
-
+        # 可访问范围：自己创建的 + 被共享的 + 所有公开知识库
         accessible_kb_ids = KnowledgeBase.objects.filter(
-            Q(creator=user) | Q(shares__shared_to=user) | Q(id__in=followed_public_kb_ids)
+            Q(creator=user) | Q(shares__shared_to=user) | Q(is_public=True)
         ).values_list("id", flat=True)
 
         # ========== 新增：用户搜索逻辑（返回完整用户数据） ==========

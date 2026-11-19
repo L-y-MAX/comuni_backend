@@ -34,7 +34,14 @@ class AIChatTaskView(APIView):
             )
 
         # 2. 提交异步任务到Celery
-        task = call_qwen_api.delay(current_article, history_messages, user_message)  # 修复：顺序需与 tasks.call_qwen_api(self, current_article, history_messages, user_message) 一致
+        try:
+            task = call_qwen_api.delay(current_article, history_messages, user_message)
+        except Exception as e:
+            # 常见原因：Redis 没启动 / 密码不对 / Celery broker 地址不对
+            return Response(
+                {'error': f'AI 任务队列不可用：{e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         # 3. 立即返回任务ID，前端用这个ID轮询结果（核心：不等待阿里云响应）
         return Response({
