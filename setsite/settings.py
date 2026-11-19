@@ -25,8 +25,12 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-DASHSCOPE_API_URL = os.getenv("DASHSCOPE_API_URL")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
+# 通义千问兼容模式：这里必须是完整接口地址（以 /chat/completions 结尾）
+DASHSCOPE_API_URL = (
+    os.getenv("DASHSCOPE_API_URL")
+    or "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', default=False)

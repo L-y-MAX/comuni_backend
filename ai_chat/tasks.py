@@ -45,6 +45,19 @@ def call_qwen_api(self, current_article, history_messages, user_message):
     3. 继续修复通义千问 API 400 错误的参数格式
     """
     try:
+        # 0. 配置校验：Key 为空时直接返回可读错误，避免 None/空字符串引发底层异常
+        if not settings.DASHSCOPE_API_KEY:
+            return {
+                "status": "FAILURE",
+                "error": "未配置 DASHSCOPE_API_KEY，请在服务器 .env 中填写阿里云百炼 API Key",
+                "error_type": "ConfigError",
+            }
+
+        # 接口地址兼容两种写法：base URL 或完整的 /chat/completions
+        api_url = (settings.DASHSCOPE_API_URL or "").rstrip("/")
+        if not api_url.endswith("/chat/completions"):
+            api_url = f"{api_url}/chat/completions"
+
         # 1. 参数预处理：确保所有数据可序列化，避免编码问题
         article_content = ""
         if isinstance(current_article, dict):
@@ -75,7 +88,7 @@ def call_qwen_api(self, current_article, history_messages, user_message):
 
         # 3. 调用通义千问API
         response = requests.post(
-            url=settings.DASHSCOPE_API_URL,
+            url=api_url,
             headers={
                 "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
                 "Content-Type": "application/json; charset=utf-8"
