@@ -46,15 +46,15 @@ def call_qwen_api(self, current_article, history_messages, user_message):
     """
     try:
         # 0. 配置校验：Key 为空时直接返回可读错误，避免 None/空字符串引发底层异常
-        if not settings.DASHSCOPE_API_KEY:
+        if not settings.AI_API_KEY:
             return {
                 "status": "FAILURE",
-                "error": "未配置 DASHSCOPE_API_KEY，请在服务器 .env 中填写阿里云百炼 API Key",
+                "error": "未配置 AI_API_KEY，请在服务器 .env 中填写大模型 API Key",
                 "error_type": "ConfigError",
             }
 
         # 接口地址兼容两种写法：base URL 或完整的 /chat/completions
-        api_url = (settings.DASHSCOPE_API_URL or "").rstrip("/")
+        api_url = (settings.AI_API_URL or "").rstrip("/")
         if not api_url.endswith("/chat/completions"):
             api_url = f"{api_url}/chat/completions"
 
@@ -68,7 +68,7 @@ def call_qwen_api(self, current_article, history_messages, user_message):
 
         # 2. 构建符合通义千问兼容模式的请求参数（修复400错误核心）
         request_data = {
-            "model": "qwen-turbo",  # 确认模型名称正确
+            "model": settings.AI_MODEL,  # deepseek-chat / deepseek-reasoner，可在 .env 调整
             "messages": [
                 {
                     "role": "system",

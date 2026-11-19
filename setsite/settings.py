@@ -25,12 +25,20 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-# 通义千问兼容模式：这里必须是完整接口地址（以 /chat/completions 结尾）
-DASHSCOPE_API_URL = (
-    os.getenv("DASHSCOPE_API_URL")
-    or "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+
+# ==================== 大模型接口（OpenAI 兼容格式） ====================
+# 默认按 DeepSeek 配置；换回通义千问只需改 .env 里的 AI_API_URL / AI_MODEL
+AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("DASHSCOPE_API_KEY", "")
+AI_API_URL = (
+    os.getenv("AI_API_URL")
+    or os.getenv("DASHSCOPE_API_URL")
+    or "https://api.deepseek.com/chat/completions"
 )
+AI_MODEL = os.getenv("AI_MODEL", "deepseek-chat")
+
+# 兼容旧配置名（ai_chat/tasks.py 已改用 AI_*，这里保留避免其他位置引用报错）
+DASHSCOPE_API_KEY = AI_API_KEY
+DASHSCOPE_API_URL = AI_API_URL
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', default=False)
