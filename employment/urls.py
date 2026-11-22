@@ -31,6 +31,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (RecruitmentInfoViewSet, EnterpriseNameViewSet, EnterpriseNatureViewSet,
                     JobNameViewSet, IndustryViewSet, RecruitMajorViewSet, MonthlySalaryViewSet,
                     RecruitNumberViewSet, CheckInStatusViewSet, IsAlumniEnterpriseViewSet)
+from .career_favorite_views import CareerResourceFavoriteView
 
 router = DefaultRouter()
 
@@ -50,5 +51,10 @@ router.register(r'employment/filters/is-alumni-enterprises', IsAlumniEnterpriseV
                 basename='filter-is-alumni-enterprises')
 
 urlpatterns = [
+    path(
+        "api/v1/employment/career-resource-favorites/",
+        CareerResourceFavoriteView.as_view(),
+        name="career-resource-favorites",
+    ),
     path("api/v1/", include(router.urls)),
 ]
