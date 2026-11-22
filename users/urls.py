@@ -36,6 +36,11 @@ from users.student_profile_views import (
     StudentProfileParseResultView,
     StudentProfileDetailView,
 )
+from users.account_views import ChangePasswordView
+from users.career_report_views import (
+    CareerReportDetailView,
+    CareerReportExportView,
+)
 
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView  # TokenObtainPairView,
 
@@ -70,6 +75,23 @@ urlpatterns = [
         'api/v1/auth/user/student-profile/',
         StudentProfileDetailView.as_view(),
         name='student_profile_detail',
+    ),
+    # 修改密码
+    path(
+        'api/v1/auth/password/change/',
+        ChangePasswordView.as_view(),
+        name='password_change',
+    ),
+    # 职业生涯发展报告
+    path(
+        'api/v1/auth/user/career-report/',
+        CareerReportDetailView.as_view(),
+        name='career_report_detail',
+    ),
+    path(
+        'api/v1/auth/user/career-report/export/',
+        CareerReportExportView.as_view(),
+        name='career_report_export',
     ),
     # 登录接口
     path('api/v1/login/', LoginView.as_view()),
