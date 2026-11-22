@@ -31,6 +31,11 @@ from users.views import (
     MyObtainTokenPairView, LoginView, UserInfoViewSet,
     CustomAuthToken, WeChatMiniLoginAPIView, PasswordLoginAPIView,
     BindWeChatAPIView, FollowViewSet)
+from users.student_profile_views import (
+    StudentProfileParseTaskView,
+    StudentProfileParseResultView,
+    StudentProfileDetailView,
+)
 
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView  # TokenObtainPairView,
 
@@ -50,6 +55,22 @@ urlpatterns = [
     path('', index, name='index'),
     path('index/', index_redirect, name='index_redirect'),
     path('api/v1/auth/', include(router_v1.urls)),
+    # 学生能力画像（异步解析 + 最近一次结果）
+    path(
+        'api/v1/auth/user/student-profile/parse/task/',
+        StudentProfileParseTaskView.as_view(),
+        name='student_profile_parse_task',
+    ),
+    path(
+        'api/v1/auth/user/student-profile/parse/result/',
+        StudentProfileParseResultView.as_view(),
+        name='student_profile_parse_result',
+    ),
+    path(
+        'api/v1/auth/user/student-profile/',
+        StudentProfileDetailView.as_view(),
+        name='student_profile_detail',
+    ),
     # 登录接口
     path('api/v1/login/', LoginView.as_view()),
     # 微信小程序登录
