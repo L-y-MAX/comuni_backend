@@ -1,4 +1,9 @@
 # views.py
+import re
+
+from django.db.models import Value
+from django.db.models.functions import Lower, Replace
+from django_filters import CharFilter, FilterSet
 from rest_framework import viewsets, status, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
@@ -53,6 +58,19 @@ class EnterpriseNatureViewSet(BaseDistinctFieldViewSet):
 class JobNameViewSet(BaseDistinctFieldViewSet):
     field_name = 'job_name'
 
+    def list(self, request):
+        values = RecruitmentInfo.objects.values_list('job_name', flat=True)
+        # 去空格 + 忽略大小写后去重：Java开发工程师 / Java 开发工程师 / java开发工程师 视为同一个
+        unique = {}
+        for value in values:
+            text = str(value or '').strip()
+            if not text:
+                continue
+            key = re.sub(r'\s+', '', text).lower()
+            if key not in unique:
+                unique[key] = text
+        return Response(sorted(unique.values()), status=status.HTTP_200_OK)
+
 
 class IndustryViewSet(BaseDistinctFieldViewSet):
     field_name = 'industry'
@@ -60,6 +78,17 @@ class IndustryViewSet(BaseDistinctFieldViewSet):
 
 class RecruitMajorViewSet(BaseDistinctFieldViewSet):
     field_name = 'recruit_major'
+
+    def list(self, request):
+        values = RecruitmentInfo.objects.values_list('recruit_major', flat=True)
+        # 招聘专业字段里常是「计算机、软件工程、网络工程」整串，拆成单个专业
+        majors = set()
+        for value in values:
+            for part in re.split(r'[、,，;；/]+', str(value or '')):
+                major = part.strip()
+                if major:
+                    majors.add(major)
+        return Response(sorted(majors), status=status.HTTP_200_OK)
 
 
 class MonthlySalaryViewSet(BaseDistinctFieldViewSet):
@@ -78,6 +107,35 @@ class IsAlumniEnterpriseViewSet(BaseDistinctFieldViewSet):
     field_name = 'is_alumni_enterprise'
 
 
+class RecruitmentInfoFilter(FilterSet):
+    # 岗位名称：去空格 + 忽略大小写后包含匹配，兼容 Java开发工程师 / Java 开发工程师 / java开发工程师
+    job_name = CharFilter(method='filter_job_name')
+    # 招聘专业：前端已拆成单个专业，用包含匹配才能命中「计算机、软件工程」这类整串字段
+    recruit_major = CharFilter(lookup_expr='icontains')
+
+    class Meta:
+        model = RecruitmentInfo
+        fields = [
+            'enterprise_name',
+            'enterprise_nature',
+            'job_name',
+            'industry',
+            'recruit_major',
+            'monthly_salary',
+            'recruit_number',
+            'check_in_status',
+            'is_alumni_enterprise',
+        ]
+
+    def filter_job_name(self, queryset, name, value):
+        normalized = re.sub(r'\s+', '', str(value or '')).lower()
+        if not normalized:
+            return queryset
+        return queryset.annotate(
+            _job_name_normalized=Replace(Lower('job_name'), Value(' '), Value('')),
+        ).filter(_job_name_normalized__icontains=normalized)
+
+
 class RecruitmentInfoViewSet(viewsets.ReadOnlyModelViewSet):
     """
     招聘信息视图集 - 提供列表和详情，支持搜索、排序以及按企业性质过滤
@@ -88,19 +146,7 @@ class RecruitmentInfoViewSet(viewsets.ReadOnlyModelViewSet):
 
     # 添加 DjangoFilterBackend 实现按字段精确过滤
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-
-    # 定义允许过滤的字段（支持 ?enterprise_nature=私营企业 这样的查询）
-    filterset_fields = [
-        'enterprise_name',  # 企业名称
-        'enterprise_nature',  # 企业性质: 私营企业
-        'job_name',  # 按 岗位名称 筛选
-        'industry',  # 按 行业 筛选
-        'recruit_major',  # 按 招聘专业 筛选
-        'monthly_salary',  # 按 月薪 筛选
-        'recruit_number',  # 按 招聘人数 筛选
-        'check_in_status',  # 按 签到状态 筛选
-        'is_alumni_enterprise',  # 按 是否校友企业 筛选
-    ]
+    filterset_class = RecruitmentInfoFilter
 
     # 搜索字段（?search=关键词）- 所有字段为“或”关系
     search_fields = [
