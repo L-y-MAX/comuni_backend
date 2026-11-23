@@ -35,6 +35,7 @@ from users.student_profile_views import (
     StudentProfileParseTaskView,
     StudentProfileParseResultView,
     StudentProfileDetailView,
+    StudentEvidenceClassifyView,
 )
 from users.account_views import ChangePasswordView
 from users.career_report_views import (
@@ -75,6 +76,11 @@ urlpatterns = [
         'api/v1/auth/user/student-profile/',
         StudentProfileDetailView.as_view(),
         name='student_profile_detail',
+    ),
+    path(
+        'api/v1/auth/user/student-profile/evidence/classify/',
+        StudentEvidenceClassifyView.as_view(),
+        name='student_profile_evidence_classify',
     ),
     # 修改密码
     path(

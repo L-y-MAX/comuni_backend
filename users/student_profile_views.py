@@ -7,6 +7,7 @@
 - GET  /api/v1/auth/user/student-profile/
 """
 
+import logging
 import uuid
 
 from django.core.cache import cache
@@ -16,11 +17,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .tasks import (
+    DIMENSION_KEYS,
     TASK_CACHE_TTL,
+    classify_evidence_with_ai,
     parse_student_profile_task,
     profile_cache_key,
     task_cache_key,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class StudentProfileParseTaskView(APIView):
@@ -118,3 +123,65 @@ class StudentProfileDetailView(APIView):
     def get(self, request):
         profile = cache.get(profile_cache_key(str(request.user.id)))
         return Response({'profile': profile})
+
+
+class StudentEvidenceClassifyView(APIView):
+    """AI 证据分类：只判断句子强度，不返回 0-100 分。
+
+    前端只在规则置信度低的句子上调用；失败时前端保留规则结果。
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        dimension = str(request.data.get('dimension') or '').strip()
+        if dimension not in DIMENSION_KEYS:
+            return Response(
+                {'error': 'dimension 不合法'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw_sentences = request.data.get('sentences')
+        if not isinstance(raw_sentences, list) or not raw_sentences:
+            return Response(
+                {'error': 'sentences 必须是非空数组'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(raw_sentences) > 6:
+            return Response(
+                {'error': '一次最多提交 6 个句子'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sentences = []
+        for index, item in enumerate(raw_sentences):
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get('text') or '').strip()
+            if not text:
+                continue
+            sentences.append({
+                'id': str(item.get('id') or f'S{index + 1}')[:40],
+                'text': text[:300],
+            })
+        if not sentences:
+            return Response(
+                {'error': '没有有效的句子'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        label = str(request.data.get('label') or dimension)
+        try:
+            items = classify_evidence_with_ai(dimension, label, sentences)
+        except Exception as exc:
+            logger.warning('AI 证据分类失败：%s', exc)
+            return Response(
+                {'items': [], 'error': f'AI 证据分类暂不可用：{exc}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response({
+            'dimension': dimension,
+            'items': items,
+            'source': 'ai',
+        })

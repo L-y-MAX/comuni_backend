@@ -65,6 +65,46 @@ def sanitize_input(input_str: str) -> str:
     return sanitized[:500]  # 限制最大长度为500字符
 
 
+def sanitize_html_content(input_str: str) -> str:
+    """清洗文章富文本，保留正常 HTML 标签。
+
+    不能用 sanitize_input()：它会删掉 < > / 引号，把 <h2> 变成 h2，
+    还会截断到 500 字。SQL 注入由 ORM 参数化查询负责，富文本只需要
+    移除脚本、iframe、事件属性和 javascript: 协议。
+    """
+    if not input_str:
+        return ''
+
+    content = str(input_str)
+
+    # 成对的 script/style/iframe/object/embed 整段删除
+    content = re.sub(
+        r'<\s*(script|style|iframe|object|embed)\b[^>]*>.*?<\s*/\s*\1\s*>',
+        '',
+        content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # 没有闭合的危险标签
+    content = re.sub(
+        r'<\s*/?\s*(script|style|iframe|object|embed)\b[^>]*>',
+        '',
+        content,
+        flags=re.IGNORECASE,
+    )
+    # 行内事件属性，如 onclick="..."
+    content = re.sub(
+        r'\son[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+        '',
+        content,
+        flags=re.IGNORECASE,
+    )
+    # javascript: / vbscript: 协议
+    content = re.sub(r'(?:javascript|vbscript)\s*:', '', content, flags=re.IGNORECASE)
+
+    # 富文本正文上限放大，避免长文章被截断
+    return content[:200000]
+
+
 def validate_uuid(uuid_str: str) -> bool:
     """校验UUID格式是否合法，防止恶意UUID注入"""
     try:
@@ -783,7 +823,7 @@ class KnowledgeNodeViewSet(viewsets.ModelViewSet):
             if 'name' in sanitized_data:
                 sanitized_data['name'] = sanitize_input(sanitized_data['name'])
             if 'content' in sanitized_data:
-                sanitized_data['content'] = sanitize_input(sanitized_data['content'])
+                sanitized_data['content'] = sanitize_html_content(sanitized_data['content'])
             if 'description' in sanitized_data:
                 sanitized_data['description'] = sanitize_input(sanitized_data['description'])
 
@@ -1393,7 +1433,7 @@ class KnowledgeNodeByKBViewSet(viewsets.ModelViewSet):
         if 'name' in sanitized_data:
             sanitized_data['name'] = sanitize_input(sanitized_data['name'])
         if 'content' in sanitized_data:
-            sanitized_data['content'] = sanitize_input(sanitized_data['content'])
+            sanitized_data['content'] = sanitize_html_content(sanitized_data['content'])
         if 'description' in sanitized_data:
             sanitized_data['description'] = sanitize_input(sanitized_data['description'])
 
@@ -1421,7 +1461,7 @@ class KnowledgeNodeByKBViewSet(viewsets.ModelViewSet):
         if 'name' in sanitized_data:
             sanitized_data['name'] = sanitize_input(sanitized_data['name'])
         if 'content' in sanitized_data:
-            sanitized_data['content'] = sanitize_input(sanitized_data['content'])
+            sanitized_data['content'] = sanitize_html_content(sanitized_data['content'])
         if 'description' in sanitized_data:
             sanitized_data['description'] = sanitize_input(sanitized_data['description'])
 

@@ -7,6 +7,7 @@
 - 输出结构对齐前端 types/studentProfile.ts，前端 normalizeStudentProfile 会补齐标签与派生字段。
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -269,6 +270,138 @@ def _call_ai(payload: dict) -> dict:
     if not isinstance(parsed, dict):
         raise ValueError('大模型返回的 JSON 不是对象')
     return parsed
+
+
+def _post_ai_chat(prompt: str, system: str, max_tokens: int = 1200, temperature: float = 0.0) -> dict:
+    """通用大模型 JSON 请求，供证据分类等轻量任务复用。"""
+    api_key, api_url, model = _ai_api_config()
+    if not api_key:
+        raise RuntimeError('未配置 AI_API_KEY')
+    if not api_url:
+        raise RuntimeError('未配置 AI_API_URL')
+
+    response = requests.post(
+        url=api_url,
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json; charset=utf-8',
+        },
+        json={
+            'model': model,
+            'messages': [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': prompt},
+            ],
+            'temperature': temperature,
+            'max_tokens': max_tokens,
+            'stream': False,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    body = response.json()
+    content = body['choices'][0]['message']['content'].strip()
+    if content.startswith('```'):
+        content = re.sub(r'^```[a-zA-Z]*\s*', '', content)
+        content = re.sub(r'\s*```$', '', content)
+    start, end = content.find('{'), content.rfind('}')
+    if start < 0 or end <= start:
+        raise ValueError('大模型未返回 JSON 对象')
+    parsed = json.loads(content[start:end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError('大模型返回的 JSON 不是对象')
+    return parsed
+
+
+def _clean_text(value, limit: int = 120) -> str:
+    return str(value or '').strip()[:limit]
+
+
+def classify_evidence_with_ai(dimension: str, label: str, sentences: list[dict]) -> list[dict]:
+    """只判断句子是否构成能力证据，不返回 0-100 分。"""
+    normalized = []
+    for index, item in enumerate(sentences):
+        text = _clean_text(item.get('text'), 300)
+        if not text:
+            continue
+        normalized.append({
+            'id': _clean_text(item.get('id') or f'S{index + 1}', 40),
+            'text': text,
+        })
+    if not normalized:
+        return []
+
+    cache_key = 'ai_evidence:' + hashlib.md5(
+        json.dumps({'dimension': dimension, 'sentences': normalized}, ensure_ascii=False).encode('utf-8')
+    ).hexdigest()
+    cached = cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
+
+    lines = '\n'.join(f'[{item["id"]}] {item["text"]}' for item in normalized)
+    prompt = (
+        f'你是能力证据分类器，不是评分器。维度：{label}（{dimension}）。\n'
+        f'请逐句判断下面的材料是否构成该维度的能力证据，并判断强度。\n'
+        '强度定义：\n'
+        '- strong：有角色/动作/结果中的具体事实，例如“担任组长，主导需求对接，项目提前 3 天上线”；\n'
+        '- medium：有动作或角色，但没有结果，例如“负责小组汇报”；\n'
+        '- weak：只有形容词或自我评价，例如“沟通能力强”；\n'
+        '- none：没有证据，或是否定句，例如“不熟悉 Redis”。\n'
+        '只输出一个 JSON 对象，不要 Markdown，不要解释：\n'
+        '{"items":[{"id":"S1","strength":"strong|medium|weak|none",'
+        '"role":"","action":"","result":"","quote":"","confidence":0.0}]}\n'
+        '要求：\n'
+        '1. quote 必须逐字来自对应句子，不能改写；没有证据时 quote 为空；\n'
+        '2. 不要把「能力强」这类形容词判成 strong；\n'
+        '3. 否定句判 none，不要把「不熟悉」当成会；\n'
+        '4. 每个输入 id 都要返回一次；\n'
+        f'材料：\n{lines}'
+    )
+    parsed = _post_ai_chat(
+        prompt,
+        system='你只输出严格 JSON，不要 Markdown，不要解释。',
+        max_tokens=1200,
+        temperature=0.0,
+    )
+
+    raw_items = parsed.get('items')
+    if not isinstance(raw_items, list):
+        return []
+
+    text_by_id = {item['id']: item['text'] for item in normalized}
+    allowed = {'strong', 'medium', 'weak', 'none'}
+    result = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        sid = _clean_text(item.get('id'), 40)
+        text = text_by_id.get(sid)
+        if not text:
+            continue
+        strength = _clean_text(item.get('strength'), 10).lower()
+        if strength not in allowed:
+            strength = 'none'
+        quote = _clean_text(item.get('quote'), 300)
+        # 引用必须能在原句中找到，否则视为模型编造
+        if not quote or quote not in text:
+            quote = ''
+            strength = 'none'
+        try:
+            confidence = float(item.get('confidence') or 0)
+        except (TypeError, ValueError):
+            confidence = 0
+        result.append({
+            'id': sid,
+            'strength': strength,
+            'role': _clean_text(item.get('role'), 40),
+            'action': _clean_text(item.get('action'), 80),
+            'result': _clean_text(item.get('result'), 80),
+            'quote': quote,
+            'confidence': max(0.0, min(1.0, confidence)),
+        })
+
+    cache.set(cache_key, result, 60 * 60)
+    return result
 
 
 def _normalize_ai_dimensions(parsed: dict) -> dict:
